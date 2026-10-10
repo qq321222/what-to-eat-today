@@ -1,0 +1,246 @@
+{
+  "schema_version": "1",
+  "capabilities": [
+    "order-recommendation",
+    "store-fulfillment",
+    "coupon-pricing",
+    "order-creation",
+    "repeat-order",
+    "group-meal"
+  ],
+  "dependencies": [
+    {
+      "id": "mcd-mcp",
+      "type": "mcp",
+      "required": true,
+      "auth_type": "browser-login",
+      "capabilities": [
+        "order-recommendation",
+        "store-fulfillment",
+        "coupon-pricing",
+        "order-creation",
+        "repeat-order",
+        "group-meal"
+      ],
+      "checks": [
+        {
+          "id": "mcd-registered",
+          "type": "mcp",
+          "required": true,
+          "server": "mcd-mcp"
+        },
+        {
+          "id": "mcd-auth-probe",
+          "type": "auth_probe",
+          "required": true,
+          "target": "query-my-account"
+        },
+        {
+          "id": "mcd-probe",
+          "type": "mcp_probe",
+          "required": true,
+          "target": "now-time-info"
+        }
+      ],
+      "setup": {
+        "official_home_url": "https://www.mcdonalds.com.cn",
+        "official_docs_url": "https://www.mcdonalds.com.cn",
+        "login_url": "https://www.mcdonalds.com.cn",
+        "console_path": [
+          "WorkBuddy 对话窗口左下角「+」连接器菜单 → 搜索「麦当劳」 → 安装连接器并完成账号授权",
+          "连接器管理页 → 自定义连接器条目 → 对 mcd-mcp 点击「信任」以启用"
+        ],
+        "credential_storage": "凭据由 WorkBuddy 连接器托管并加密存储于本地 WorkBuddy 配置，不在对话中粘贴 Token、密码或验证码",
+        "steps": [
+          "打开 WorkBuddy 对话窗口左下角「+」连接器菜单",
+          "搜索「麦当劳」，安装麦当劳 MCP 连接器",
+          "按提示完成麦当劳账号授权",
+          "在连接器管理页对 mcd-mcp 点击「信任」启用"
+        ],
+        "verify": "在对话中说「帮我点麦当劳」或询问当前时间，能返回真实时间或门店数据即连接正常",
+        "rotate_or_revoke": "在连接器管理页禁用或解绑麦当劳连接器即撤销授权；重新走一遍授权流程即可完成轮换",
+        "security": "仅授予点餐所需最小能力；任何情况下不在对话中提供凭据明文",
+        "verified_at": "2026-10-10",
+        "applies_to_version": "mcd-mcp（streamablehttp，服务端点 https://mcp.mcd.cn）"
+      },
+      "degradation": [
+        {
+          "capability": "order-recommendation",
+          "trigger": "mcd-mcp 不可用或 query-meals 调用失败",
+          "fallback": "停止自动生成真实菜单搭配，请用户说明想吃的品类，按 references/combo-strategy.md 预算带给出结构性建议并声明未经系统验证",
+          "user_input": "想吃的品类、人数、预算",
+          "limitations": "无真实菜单与价格，估价为推断，不能用于下单",
+          "evidence_label": "推断",
+          "recovery": "重新授权麦当劳连接器后重试",
+          "stop_condition": "连接器连续 3 次调用失败且无法完成授权时，停止点餐流程并说明可继续所需条件"
+        },
+        {
+          "capability": "store-fulfillment",
+          "trigger": "query-nearby-stores 或 delivery-query-stores 无返回或调用失败",
+          "fallback": "明确告知「没找到门店」，请求用户提供城市或商圈关键词后重试；禁止虚构门店",
+          "user_input": "城市或商圈关键词",
+          "limitations": "无门店则无法继续真实点餐",
+          "evidence_label": "推断",
+          "recovery": "用户提供关键词后重新查询",
+          "stop_condition": "多次搜索仍无结果且用户无法提供新关键词时停止"
+        },
+        {
+          "capability": "coupon-pricing",
+          "trigger": "query-store-coupons 或 calculate-price 调用失败",
+          "fallback": "回退无券价展示并明确标注「未经优惠试算」，不宣称任何优惠",
+          "user_input": "",
+          "limitations": "无券后价则失去比价能力，仅保留原价方案",
+          "evidence_label": "推断",
+          "recovery": "连接器恢复后重新执行比价状态",
+          "stop_condition": "试算预算耗尽且连接器持续失败时停止比价，仅展示已验证结果"
+        },
+        {
+          "capability": "order-creation",
+          "trigger": "create-order 调用失败",
+          "fallback": "如实报告失败原因，不虚构下单结果；引导用户稍后重试或改用麦当劳 APP 下单",
+          "user_input": "是否稍后重试",
+          "limitations": "订单未创建，需用户自行完成下单时不受本技能保障",
+          "evidence_label": "推断",
+          "recovery": "重试前重新走一次最终复核与硬确认",
+          "stop_condition": "连续失败 2 次后停止自动下单，转人工指引"
+        },
+        {
+          "capability": "repeat-order",
+          "trigger": "order-list 为空或最近订单属于积分商城（mall 订单）",
+          "fallback": "如实告知无可复购餐品订单，转入全新点餐流程（S0）",
+          "user_input": "是否走全新搭配",
+          "limitations": "无法复用时退回全新流程，不影响其他能力",
+          "evidence_label": "推断",
+          "recovery": "用户产生新的餐品订单后即可复购",
+          "stop_condition": "无"
+        },
+        {
+          "capability": "group-meal",
+          "trigger": "delivery-query-stores 无团餐可配送门店或 query-meal-assistance 失败",
+          "fallback": "提示更换门店或改走麦乐送流程；助餐服务获取失败时如实说明并询问是否继续",
+          "user_input": "更换门店或履约方式的选择",
+          "limitations": "团餐满减满折维度缺失时仅按券比价并声明",
+          "evidence_label": "推断",
+          "recovery": "更换门店或履约方式后重走团餐链路",
+          "stop_condition": "无法获取 gmServiceCode 时停止团餐下单，普通麦乐送流程不受影响"
+        }
+      ]
+    },
+    {
+      "id": "python-runtime",
+      "type": "runtime",
+      "required": false,
+      "auth_type": "none",
+      "capabilities": [
+        "order-recommendation",
+        "coupon-pricing"
+      ],
+      "checks": [
+        {
+          "id": "python-version",
+          "type": "python",
+          "required": true,
+          "min_version": "3.10"
+        }
+      ],
+      "setup": {
+        "official_home_url": "https://www.python.org",
+        "official_docs_url": "https://docs.python.org",
+        "download_url": "https://www.python.org/downloads/",
+        "steps": [
+          "安装 Python 3.10 或更高版本",
+          "将 Python 加入 PATH",
+          "运行 python --version 确认版本"
+        ],
+        "verify": "python --version 输出 3.10 及以上",
+        "security": "脚本仅使用 Python 标准库，无网络、无子进程、无文件读写，仅标准输入输出",
+        "verified_at": "2026-10-10",
+        "applies_to_version": "Python 3.10+"
+      },
+      "degradation": [
+        {
+          "capability": "order-recommendation",
+          "trigger": "Python 不可用或 combo_builder.py 执行失败",
+          "fallback": "按 references/combo-strategy.md 的人工降级推理步骤生成搭配，输出前声明「估算价」",
+          "user_input": "",
+          "limitations": "组合未经脚本枚举，多样性与价格贴合度下降，价格为估算",
+          "evidence_label": "推断",
+          "recovery": "恢复 Python 环境后重新执行脚本",
+          "stop_condition": "无菜单数据时停止推荐，转入询问用户品类"
+        },
+        {
+          "capability": "coupon-pricing",
+          "trigger": "Python 不可用或 compare_plans.py 执行失败",
+          "fallback": "按 references/pricing-engine.md 打分公式手算排序并声明「估算价」，最终仍以 calculate-price 为准",
+          "user_input": "",
+          "limitations": "手工汇总可能出错，需明示未经脚本校验",
+          "evidence_label": "推断",
+          "recovery": "恢复 Python 环境后重新执行脚本",
+          "stop_condition": "试算数据本身缺失时停止比价，不以估算价冒充试算价"
+        }
+      ]
+    }
+  ],
+  "functional_degradations": [
+    {
+      "capability": "order-recommendation",
+      "trigger": "combo_builder.py 执行失败、菜单结构变化或 Python 不可用",
+      "fallback": "按 references/combo-strategy.md 预算带与口味标签人工推理搭配，输出前声明「估算价」",
+      "user_input": "",
+      "limitations": "组合为人工挑选，多样性可能下降；价格为菜单价估算",
+      "evidence_label": "推断",
+      "recovery": "恢复脚本执行环境后重新运行",
+      "stop_condition": "无菜单数据时停止推荐，转入询问用户品类"
+    },
+    {
+      "capability": "coupon-pricing",
+      "trigger": "compare_plans.py 执行失败",
+      "fallback": "按 references/pricing-engine.md 打分公式手算排序并声明「估算价」，最终仍以 calculate-price 为准",
+      "user_input": "",
+      "limitations": "手工汇总可能出错，需明示未经脚本校验",
+      "evidence_label": "推断",
+      "recovery": "恢复脚本执行环境后重新运行",
+      "stop_condition": "试算数据缺失时不以估算价冒充试算价"
+    },
+    {
+      "capability": "store-fulfillment",
+      "trigger": "无收藏门店（query-nearby-stores searchType=1 无返回）",
+      "fallback": "改用 searchType=2 按城市+关键词搜索并告知「按你所在城市搜索」",
+      "user_input": "城市与位置关键词",
+      "limitations": "搜索结果依赖用户提供的关键词质量",
+      "evidence_label": "推断",
+      "recovery": "用户补充收藏或更精确关键词后重查",
+      "stop_condition": "搜索无结果且用户无法提供新关键词时停止，禁止虚构门店"
+    },
+    {
+      "capability": "order-creation",
+      "trigger": "用户回复模糊确认词（嗯 / 随便 / 可以吧 / 你看着办 / 好的）",
+      "fallback": "复述四项（券后价、履约与门店、商品明细、外送地址与备注）后重新请求明确确认，不调用 create-order",
+      "user_input": "对四项的明确表态",
+      "limitations": "下单延迟一轮，换取确认确定性",
+      "evidence_label": "推断",
+      "recovery": "用户给出有效确认词后立即下单",
+      "stop_condition": "用户明确放弃则终止流程"
+    },
+    {
+      "capability": "repeat-order",
+      "trigger": "历史订单为空或最近订单无明细",
+      "fallback": "告知无可复购订单，转入全新点餐流程（S0）",
+      "user_input": "",
+      "limitations": "复购不可用，不影响全新点餐",
+      "evidence_label": "推断",
+      "recovery": "产生新订单后复购能力自动恢复",
+      "stop_condition": "无"
+    },
+    {
+      "capability": "group-meal",
+      "trigger": "query-promotions 调用失败",
+      "fallback": "跳过满减满折维度，仅按券比价并向用户声明缺少促销比对",
+      "user_input": "",
+      "limitations": "团餐可能错过满减满折最优解",
+      "evidence_label": "推断",
+      "recovery": "连接器恢复后补查促销规则",
+      "stop_condition": "券与促销均不可用时停止团餐比价，仅展示原价"
+    }
+  ]
+}
